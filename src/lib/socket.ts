@@ -23,7 +23,7 @@ export const sendSocketMsg = (
  * @returns socket
  * @throws Error if an address is provided, but cannot be bound to
  */
-export const createListenSocket = (address?: string): Promise<Socket> => {
+export const createListenSocket = async (address?: string): Promise<Socket> => {
   const networks = networkInterfaces();
   let addresses = Object.values(networks)
     .flat()
@@ -46,21 +46,29 @@ export const createListenSocket = (address?: string): Promise<Socket> => {
     addresses = [address];
   }
 
-  return new Promise((resolve) => {
-    addresses.forEach((address) => {
-      const socket = createSocket({
-        type: "udp4",
-        reuseAddr: true,
-      });
-      socket.once("message", () => resolve(socket));
-      socket.on("listening", () => {
-        socket.setBroadcast(true);
-        socket.setMulticastTTL(128);
-        socket.addMembership(BROADCAST_ADDRESS);
-        sendSocketMsg(socket, GoveeSocketMessage.BroadCastDiscover());
-      });
+  const addressPromises = addresses.map(
+    (address) =>
+      new Promise<Socket>((resolve, reject) => {
+        const socket = createSocket({
+          type: "udp4",
+          reuseAddr: true,
+        });
+        socket.once("message", () => resolve(socket));
+        socket.on("listening", () => {
+          socket.setBroadcast(true);
+          socket.setMulticastTTL(128);
+          socket.addMembership(BROADCAST_ADDRESS);
+          sendSocketMsg(socket, GoveeSocketMessage.BroadCastDiscover());
+        });
+        socket.once("error", (error) => reject(error));
 
-      socket.bind(SOCKET_LISTEN_PORT, address);
-    });
-  });
+        socket.bind(SOCKET_LISTEN_PORT, address);
+      })
+  );
+
+  try {
+    return await Promise.any(addressPromises);
+  } catch {
+    throw new Error(`No address could be bound to.`);
+  }
 };

@@ -64,6 +64,7 @@ export class Govee extends EventEmitter {
     this.debug("Govee instance initializing, waiting for socket to be ready");
     this.socket = await createListenSocket(this.opts.listenTo);
     this.socket.on("message", this.onReceiveMessage.bind(this));
+    this.socket.on("error", (error) => this.emit(GoveeEventTypes.Error, error));
 
     if (this.opts.discover) {
       this.discover();
